@@ -1,0 +1,272 @@
+import wave
+import struct
+import math
+import random
+Dynamics={'pp':[0,500],'p':[500,1000],'mp':[1000,2000],'mf':[2000,4000],'f':[4000,8000],'ff':[8000,65536]}
+def Flux(Address,Amplitude): #Flux works just as well and is way less messy
+        print('Fluxing')
+        Song=wave.open(Address,'rb')
+        Song.setpos(0)
+        channelnumber=Song.getnchannels()
+        Instants,Means,Variances=[],[],[]
+        for n in range(channelnumber):
+                Instants.append([0])
+                Means.append(0)
+                Variances.append(0)
+        Pulse=[]
+        Framerate=Song.getframerate()
+        Instant_Length=1024
+        #Instant_Length=512
+        Outputs={'Onsets':[]}
+        Average=0
+        OnBeat=[False,False]
+        for n in range(0,Song.getnframes(),8):#We are undersampling
+                Song.setpos(n)
+                data=Song.readframes(1)
+                for m in range(channelnumber):
+                        Instants[m][-1]+=abs(struct.unpack("h",data[2*m:2*m+2])[0])#Instants represent one data point
+                        if n%Instant_Length==0 and n>0:
+                                Instants[m][-1]=Instants[m][-1]/Instant_Length
+                                Average+=Instants[m][-1]
+                                if len(Instants[m])==2:
+                                        flux=Instants[m][-1]-Instants[m][-2]
+                                        if flux>Amplitude:#Arbitrary constant, this could be proportional to overall volume
+                                                if OnBeat[m]==False:
+                                                        Pulse.append(n)
+                                                        Outputs['Onsets'].append([n,m,Instants[m][-1]])#Time,Channel Number,Intensity
+                                                        OnBeat[m]=True
+                                        else:
+                                                OnBeat[m]=False
+                                        Instants[m]=Instants[m][1:]
+                                Instants[m].append(0)
+        Average=Average*Instant_Length*8/Song.getnframes()
+        Dynamic='pp'
+        for Marking in Dynamics:
+                if Average>=Dynamics[Marking][0] and Average<Dynamics[Marking][1]:
+                        Dynamic=Marking
+        Outputs['Dynamic']=Dynamic
+        Outputs['BPM']=44100#Just a place holder
+        Outputs['Continue']=True
+        if len(Outputs['Onsets'])>1:
+                Pulse=list(set(Pulse))
+                Pulse.sort()
+                Spaces=[]
+                for n in range(1,len(Pulse)):
+                        Spaces.append(Pulse[n]-Pulse[n-1])
+                        while Spaces[-1]<22500:
+                                Spaces[-1]=Spaces[-1]*2
+                        while Spaces[-1]>44100:
+                                Spaces[-1]=Spaces[-1]/2
+                print(Outputs['Onsets'])
+                BPM=sum(Spaces)/len(Spaces)
+                Outputs['BPM']=BPM
+                return Outputs
+        else:
+                if Amplitude>1:
+                        return Flux(Address,Amplitude/2)
+                else:
+                        Outputs['Continue']=False
+                        return Outputs
+
+def Beatroot(Address,C):
+        print('Beatrooting')
+        Song=wave.open(Address,'rb')
+        Song.setpos(0)
+        channelnumber=Song.getnchannels()
+        Instants,Means,Variances=[],[],[]
+        #Instant_Count=43#NUmber of samples
+        Instant_Count=20
+        for n in range(channelnumber):
+                Instants.append([])
+                for m in range(Instant_Count-1):
+                        Instants[n].append(random.randint(0,30))
+                Instants[n].append(0)
+                Means.append(0)
+                Variances.append(0)
+        Pulse=[]
+        Framerate=Song.getframerate()
+        Instant_Length=1024
+        Outputs={'Onsets':[]}
+        SumTotal=0
+        OnBeat=[False,False]
+        PossibleOnsets=[[],[]]
+        for n in range(0,Song.getnframes(),8):#We are undersampling
+                '''if n%4096==0:
+                        print(n)'''
+                Song.setpos(n)
+                data=Song.readframes(1)
+                for m in range(channelnumber):
+                        Instants[m][-1]+=abs(struct.unpack("h",data[2*m:2*m+2])[0])#Instants represent one data point
+                        if n%Instant_Length==0 and n>0:
+                                Instants[m][-1]=Instants[m][-1]/Instant_Length
+                                SumTotal+=Instants[m][-1]
+                                Mean=sum(Instants[m])/Instant_Count
+                                StandardDeviation=0
+                                for Instant in Instants[m]:
+                                        StandardDeviation+=(Mean-Instant)**2
+                                StandardDeviation=(StandardDeviation/(Instant_Length-1))**(1/2)
+                                PossibleOnsets[m].append([Instants[m][-1],Mean,StandardDeviation])#TEST LINE
+                                Instants[m]=Instants[m][1:]
+                                Instants[m].append(0)
+        Average=SumTotal*Instant_Length*8/Song.getnframes()
+        Dynamic='pp'
+        for Marking in Dynamics:
+                if Average>=Dynamics[Marking][0] and Average<Dynamics[Marking][1]:
+                        Dynamic=Marking
+        Outputs['Dynamic']=Dynamic
+        Outputs['BPM']=44100#Just a place holder
+        Outputs['Continue']=True
+        #print('Onsets',Outputs['Onsets'])
+        Continue=True
+        while Continue==True: 
+                for m in range(len(PossibleOnsets)):
+                        OnBeat=False
+                        for n in range(len(PossibleOnsets[m])):
+                                if PossibleOnsets[m][n][0]-PossibleOnsets[m][n][1]>PossibleOnsets[m][n][1]*C:
+                                        if PossibleOnsets[m][n][0]>30:#Another Arbitrary Constant
+                                                if OnBeat==False:
+                                                        Pulse.append(n)
+                                                        Outputs['Onsets'].append([n*Instant_Length,m,PossibleOnsets[m][n][0]])#Time,Channel Number,Intensity
+                                                        OnBeat=True
+                                        else:
+                                                OnBeat=False
+                                else:
+                                        OnBeat=False
+                if len(Outputs['Onsets'])>0:
+                        if len(Outputs['Onsets'])>1:
+                                Pulse=list(set(Pulse))
+                                Pulse.sort()
+                                Spaces=[]
+                                for n in range(1,len(Pulse)):
+                                        Spaces.append(Pulse[n]-Pulse[n-1])
+                                        while Spaces[-1]<22500:
+                                                Spaces[-1]=Spaces[-1]*2
+                                        while Spaces[-1]>44100:
+                                                Spaces[-1]=Spaces[-1]/2
+                                print(Outputs['Onsets'])
+                                BPM=sum(Spaces)/len(Spaces)
+                                Outputs['BPM']=BPM
+                                break
+                        break
+                else:
+                        print('Searching Again')
+                        C=C*0.8
+                if C>0.1:
+                        print('Failure')
+                        Outputs['Continue']=False
+                        break
+        return Outputs
+        '''if len(Outputs['Onsets'])>1:
+                Pulse=list(set(Pulse))
+                Pulse.sort()
+                Spaces=[]
+                for n in range(1,len(Pulse)):
+                        Spaces.append(Pulse[n]-Pulse[n-1])
+                        while Spaces[-1]<22500:
+                                Spaces[-1]=Spaces[-1]*2
+                        while Spaces[-1]>44100:
+                                Spaces[-1]=Spaces[-1]/2
+                print(Outputs['Onsets'])
+                BPM=sum(Spaces)/len(Spaces)
+                Outputs['BPM']=BPM
+                return Outputs
+        else:
+                if Amplitude>1:
+                        return Flux(Address,C*0.8)
+                else:
+                        Outputs['Continue']=False
+                        return Outputs'''
+        
+def OldBeatroot(Address,C):
+        print('Beatrooting')
+        Song=wave.open(Address,'rb')
+        Song.setpos(0)
+        channelnumber=Song.getnchannels()
+        Instants,Means,Variances=[],[],[]
+        Instant_Count=43#NUmber of samples
+        for n in range(channelnumber):
+                Instants.append([])
+                for m in range(Instant_Count-1):
+                        Instants[n].append(random.randint(0,30))
+                Instants[n].append(0)
+                Means.append(0)
+                Variances.append(0)
+        Pulse=[]
+        Framerate=Song.getframerate()
+        Instant_Length=1024
+        Outputs={'Onsets':[]}
+        SumTotal=0
+        OnBeat=[False,False]
+        #PossibleOnsets=[[],[]]
+        for n in range(0,Song.getnframes(),8):#We are undersampling
+                '''if n%4096==0:
+                        print(n)'''
+                Song.setpos(n)
+                data=Song.readframes(1)
+                for m in range(channelnumber):
+                        Instants[m][-1]+=abs(struct.unpack("h",data[2*m:2*m+2])[0])#Instants represent one data point
+                        if n%Instant_Length==0 and n>0:
+                                Instants[m][-1]=Instants[m][-1]/Instant_Length
+                                SumTotal+=Instants[m][-1]
+                                #if len(Instants[m])==Instant_Count:
+                                Mean=sum(Instants[m])/Instant_Count
+                                StandardDeviation=0
+                                for Instant in Instants[m]:
+                                        StandardDeviation+=(Mean-Instant)**2
+                                StandardDeviation=(StandardDeviation/(Instant_Length-1))**(1/2)
+                                #PossibleOnsets[m].append([Instants[m][-1],Mean,StandardDeviation])#TEST LINE
+                                if Instants[m][-1]-Mean>StandardDeviation*C:#Arbitrary constant, this could be proportional to overall volume
+                                        if Instants[m][-1]>30:#Another Arbitrary Constant
+                                                if OnBeat[m]==False:
+                                                        Pulse.append(n)
+                                                        Outputs['Onsets'].append([n,m,Instants[m][-1]])#Time,Channel Number,Intensity
+                                                        OnBeat[m]=True
+                                        else:
+                                                OnBeat[m]=False
+                                else:
+                                        OnBeat[m]=False
+                                
+                                Instants[m]=Instants[m][1:]
+                                Instants[m].append(0)
+        Average=SumTotal*Instant_Length*8/Song.getnframes()
+        Dynamic='pp'
+        for Marking in Dynamics:
+                if Average>=Dynamics[Marking][0] and Average<Dynamics[Marking][1]:
+                        Dynamic=Marking
+        Outputs['Dynamic']=Dynamic
+        Outputs['BPM']=44100#Just a place holder
+        Outputs['Continue']=True
+        print('Onsets',Outputs['Onsets'])
+        '''for m in range(len(PossibleOnsets)):
+                OnBeat=False
+                for n in range(len(PossibleOnsets[m])):
+                        if PossibleOnsets[m][n][0]-PossibleOnsets[m][n][1]>PossibleOnsets[m][n][1]*C:
+                                if PossibleOnsets[m][n][0]>30:#Another Arbitrary Constant
+                                        if OnBeat==False:
+                                                Pulse.append(n)
+                                                Outputs['Onsets'].append([n*Instant_Length,m,PossibleOnsets[m][n][0]])#Time,Channel Number,Intensity
+                                                OnBeat=True
+                                else:
+                                        OnBeat=False
+                        else:
+                                OnBeat=False'''
+        if len(Outputs['Onsets'])>1:
+                Pulse=list(set(Pulse))
+                Pulse.sort()
+                Spaces=[]
+                for n in range(1,len(Pulse)):
+                        Spaces.append(Pulse[n]-Pulse[n-1])
+                        while Spaces[-1]<22500:
+                                Spaces[-1]=Spaces[-1]*2
+                        while Spaces[-1]>44100:
+                                Spaces[-1]=Spaces[-1]/2
+                print(Outputs['Onsets'])
+                BPM=sum(Spaces)/len(Spaces)
+                Outputs['BPM']=BPM
+                return Outputs
+        else:
+                if Amplitude>1:
+                        return Flux(Address,C*0.8)
+                else:
+                        Outputs['Continue']=False
+                        return Outputs
