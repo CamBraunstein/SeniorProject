@@ -1,0 +1,118 @@
+import wave
+import struct
+import math
+from Handicapping import *
+A=27.5
+'''f='/Users/cam/Desktop/Senior Project/Harmonics.txt'
+file=str(open(f).read()).split('$')
+for n in range(len(file)):
+        file[n]=file[n][1:-1]
+#print(file)
+for n in range(0,len(file),2):
+        #print(n)
+        Harmonics={}
+        Data=file[n+1].split(',')
+        #print(Data)
+        for entry in Data:
+                #print(int(entry.split(':')[0]))
+                Harmonics[int(entry.split(':')[0])]=float(entry.split(':')[1])
+        #print(Harmonics)
+        HarmonicsDictionary[file[n]]=Harmonics
+#print(HarmonicsDictionary)'''
+class pitch:
+        def __init__(self,Pitch,Sampling_Rate,N):
+                self.N=N
+                self.Pitch=Pitch
+                #print(Pitch)
+                self.Frequency=math.e**((0-1j)*2*math.pi*A*2**(Pitch/12)/Sampling_Rate)
+                self.Sum=0
+                self.ShiftSums=[0]
+                self.Sums=[]
+                        
+'''class handicap:
+        def __init__(self,Instrument,N):
+                self.N=N
+                #self.Harmonics={12:0.25,19:0.15,24:0}
+                self.Harmonics=HarmonicsDictionary[Instrument]
+                self.KnownPitches={}
+                self.HarmonicHandicapOn=True
+        def HarmonicHandicap(self,Pitch):
+                #print('hcapping',self.KnownPitches)
+                Weight=0
+                if self.HarmonicHandicapOn==True:
+                        for n in self.KnownPitches:
+                                if Pitch-n in self.Harmonics:
+                                        Weight+=self.KnownPitches[n]*self.Harmonics[Pitch-n]
+                        Weight=Weight/2**(self.N-1)
+                return Weight
+        def AudibleHandicap(self):
+                print('Work in Progress')'''
+
+
+                
+#Ok, we can rework this Q transform to really start tracking at the beat, and then
+#follow the relevant wave
+
+#I could make the cut-off amplitude proportional to the strength of the onset...
+def Qtransform(Address,FolderAddress,PitchEvent,Channelnumber,Volume):
+        Handicap.Initialize(FolderAddress)
+        Handicap.KnownPitches={}
+        Sampling_Rate=44100
+        Frequencies={}
+        NoteList=[]
+        #A=27.5
+        Amplitude=4000#This can be proportional to the power of the onset
+        #Amplitude=Volume*1.5
+        SustainedAmplitude=Amplitude/4
+        #We can also add in our audibility curve....
+        N=12
+        S=5
+        #Sampling_Rate=Transcription.Framerate
+        WriteSpectrogram=False
+        for n in range(88):
+                #The Hertz Frequency in A*2**(n/12)
+                #Frequencies.append(A*2**(n/12)/Sampling_Rate)#/Sampling_Rate)#2**N not neccessary, becuase it is divided anyway.
+                Frequencies[n]=pitch(n,44100,N)
+        Song=wave.open(Address,'rb')
+        Song.setpos(PitchEvent)#Change to time at some point
+        Counter=0
+        while len(Frequencies)!=0:
+                data=Song.readframes(1)
+                if len(data)>0:
+                        Value=struct.unpack("h",data[2*Channelnumber:2*Channelnumber+2])[0]
+                else:
+                        Value=0
+                for n in Frequencies:
+                        Frequencies[n].ShiftSums[-1]+=Value*(Frequencies[n].Frequency**Counter)
+                if Counter%2**S==0 and Counter>0:
+                        if Counter==2**N:
+                                DeathList=[]
+                                for n in Frequencies:
+                                        Frequencies[n].Sum=sum(Frequencies[n].ShiftSums)
+                                        Frequencies[n].Sums.append(abs(Frequencies[n].Sum))
+                                        if Frequencies[n].Sums[0]/2**(N-1)>=Amplitude+Handicap.HarmonicHandicap(n):#Arbitrary Constant
+                                                print('Pitch',n,PitchEvent+Counter,(Frequencies[n].Sums[0]/2**(N-1)-Handicap.HarmonicHandicap(n))/Volume,Volume)
+                                                Handicap.KnownPitches[n]=Frequencies[n].Sums[0]
+                                                Frequencies[n].ShiftSums=Frequencies[n].ShiftSums[1:]#Crucial
+                                        else:
+                                                DeathList.append(n)
+                                for n in DeathList:
+                                        del Frequencies[n]
+                        elif Counter>2**N:
+                                EndList=[]
+                                for n in Frequencies:
+                                        Frequencies[n].Sum+=(Frequencies[n].ShiftSums[-1]-Frequencies[n].ShiftSums[0])
+                                        Frequencies[n].Sums.append(abs(Frequencies[n].Sum))
+                                        
+                                        if Frequencies[n].Sums[-1]>SustainedAmplitude*2**(N-1) and (Frequencies[n].Sums[-1]-Frequencies[n].Sums[-2])/2**N<200:
+                                                Frequencies[n].ShiftSums=Frequencies[n].ShiftSums[1:]
+                                        else:
+                                                EndList.append(n)
+                                for n in EndList:
+                                        Note=[PitchEvent,Counter,Frequencies[n].Pitch,sum(Frequencies[n].Sums)/(len(Frequencies[n].Sums)*2**N)]
+                                        NoteList.append(Note)
+                                        del Frequencies[n]
+                        for n in Frequencies:
+                                Frequencies[n].ShiftSums.append(0)
+                Counter+=1
+        return NoteList
