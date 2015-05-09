@@ -1,0 +1,131 @@
+Note_List=['Note','Pitch','Step','Octave','Duration','Voice','Type','Alter','Stem','Staff','Dynamics','Key','Fifths','Mode','Words','Divisions','Time','Beats','Staves','Sign','Line','Beat-Type']
+Note_Attributes={}
+for Attribute in Note_List:
+        Note_Attributes[Attribute]=["<"+Attribute.lower()+">","</"+Attribute.lower()+">"]
+Attribute_List=['Key','Fifths','Mode','Words']
+Attributes={}
+for Attribute in Attribute_List:
+        Attributes[Attribute]=["<"+Attribute.lower()+">","</"+Attribute.lower()+">"]
+
+def AddAttribute(Attribute,Value):
+        String=""
+        String+=Note_Attributes[Attribute][0]+Value+Note_Attributes[Attribute][1]+"\n"
+        return String
+def FormatNote(Note):
+        NoteString=Note_Attributes['Note'][0]+"\n"
+        if Note.Type=='Note':
+                if Note.Chord==True:
+                        NoteString+='<chord/>'
+                NoteString+=Note_Attributes['Pitch'][0]+"\n"#Alter, Step and Octave
+                if Note.Alter>0:
+                        NoteString+=AddAttribute('Alter',str(Note.Alter))
+                NoteString+=AddAttribute('Step',Note.Letter)
+                NoteString+=AddAttribute('Octave',str(Note.Octave))
+                NoteString+=Note_Attributes['Pitch'][1]+"\n"
+                NoteString+=AddAttribute('Duration',str(Note.Duration))
+                if Note.Tie!=False:
+                        if Note.Tie=='Start'or Note.Tie=='Middle':
+                                NoteString+='<tie type="stop"/>\n<tie type="start"/>\n'
+                        elif Note.Tie=='End':
+                                NoteString+='<tie type="stop"/>\n'
+                NoteString+=AddAttribute('Voice',str(Note.Voice))
+                NoteString+=AddAttribute('Type',Note.Value)
+                if Note.Dot==True:
+                        NoteString+='<dot/>'
+                NoteString+=AddAttribute('Stem','up')
+                if Note.Pitch>39:
+                        NoteString+=AddAttribute('Staff',str(1))
+                else:
+                        NoteString+=AddAttribute('Staff',str(2))
+                if Note.Tie!=False:
+                        NoteString+='<notations>\n'
+                        if Note.Tie=='Start':
+                                NoteString+='<tied type="stop"/>\n<tied type="start"/>\n'
+                        elif Note.Tie=='End':
+                                NoteString+='<tied type="stop"/>\n'
+                        NoteString+='</notations>\n'
+        elif Note.Type=='Rest':
+                NoteString+='<rest/>\n'
+                NoteString+=AddAttribute('Duration',str(Note.Duration))
+                NoteString+=AddAttribute('Voice',str(Note.Voice))
+                NoteString+=AddAttribute('Type',Note.Value)
+                NoteString+=AddAttribute('Staff',str(1))
+        else:
+                print('Rest Problem')
+        NoteString+=Note_Attributes['Note'][1]+"\n"
+        return NoteString
+
+def NewFormat(Transcription):
+        Address=Transcription.FolderAddress+"/XMLdictionaryreference.txt"
+        reference={}
+        reference['Header']=str(open(Address).read().split('$')[0])
+        reference['Credits']=str(open(Address).read().split('$')[2])
+        reference['Layout']=str(open(Address).read().split('$')[3])
+        #reference['Attributes']=str(open(Address).read().split('$')[5])
+        #reference['End']=str(open(Address).read().split('$')[6])
+        #reference={'Header':str(open(Address).read().split('$')[0]),'Attributes':str(open(Address).read().split('$')[2]),'End':str(open(Address).read().split('$')[3])}
+        Document=reference['Header']
+        Document+='<credit page="1">\n'
+        Document+='<credit-words default-x="674.687" default-y="1683.75" font-size="24" justify="center" valign="top">'
+        Document+=Transcription.Title
+        Document+='</credit-words>\n</credit>\n'
+        Document+=reference['Credits']
+        for n in range(len(Transcription.Measures)):
+                Measure='<measure number="'+str(n)+'">\n'
+                if n==0:
+                        Measure+=reference['Layout']
+                        Measure+='<attributes>\n'
+                        Measure+=AddAttribute('Divisions',str(4))
+                        Key=Attributes['Key'][0]+'\n'
+                        Key+=Attributes['Fifths'][0]+str(Transcription.Key)+Attributes['Fifths'][1]+'\n'
+                        Key+=Attributes['Mode'][0]+'major'+Attributes['Mode'][1]+'\n'
+                        Key+=Attributes['Key'][1]+'\n'
+                        Measure+=Key
+                        Time='<time>\n'
+                        Time+=AddAttribute('Beats',str(4))
+                        Time+=AddAttribute('Beat-Type',str(4))
+                        Time+='</time>\n'
+                        Measure+=Time
+                        Clefs=AddAttribute('Staves',str(2))
+                        Clefs+='<clef number="1">\n'
+                        Clefs+=AddAttribute('Sign','G')
+                        Clefs+=AddAttribute('Line',str(2))
+                        Clefs+='</clef>\n'
+                        Clefs+='<clef number="2">\n'
+                        Clefs+=AddAttribute('Sign','F')
+                        Clefs+=AddAttribute('Line',str(4))
+                        Clefs+='</clef>\n'
+                        Measure+=Clefs
+                        Measure+='</attributes>\n'
+                        Dynamics='<direction placement="below">\n'
+                        Dynamics+='<direction-type>\n'
+                        Dynamics+=AddAttribute('Dynamics','<'+Transcription.Dynamic+'/>')
+                        Dynamics+='</direction-type>\n'
+                        Dynamics+=AddAttribute('Staff',str(1))
+                        Dynamics+='<sound dynamics="171.11"/>\n'
+                        Dynamics+='</direction>\n'
+                        Measure+=Dynamics
+                        Tempo='<direction placement="above">\n'
+                        Tempo+='<direction-type>\n'
+                        Tempo+='<words>'+Transcription.Tempo+ '</words>\n'
+                        Tempo+='</direction-type>\n'
+                        Tempo+='<direction-type>\n'
+                        Tempo+='<metronome parentheses="yes">\n'
+                        Tempo+='<beat-unit>quarter</beat-unit>\n'
+                        Tempo+='<per-minute>'+str(round(60*44100/Transcription.BPM))+'</per-minute>\n'
+                        Tempo+='</metronome>\n'
+                        Tempo+='</direction-type>\n'
+                        Tempo+=AddAttribute('Staff',str(1))
+                        Tempo+='<sound tempo="'+str(round(60*44100/Transcription.BPM))+'"/>\n'
+                        Tempo+='</direction>\n'
+                        Measure+=Tempo
+                for m in range(len(Transcription.Measures[n])):
+                        for o in range(len(Transcription.Measures[n][m])):
+                                Measure+=FormatNote(Transcription.Measures[n][m][o]) #Include </chord> tag
+                Measure+='</measure>\n'
+                Document+=Measure
+        Document+='</part>\n'
+        Document+='</score-partwise>\n'
+        File=open(Transcription.FolderAddress+"Transcriptions/"+Transcription.Title+".xml",'w')
+        File.write(Document)
+        File.close()
