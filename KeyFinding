@@ -1,0 +1,32 @@
+def FindKey(Pitches):
+        if len(Pitches)>0:
+                Keys={}
+                Strikes={}
+                Key=[4,6,8,9,11,1,3]
+                for n in range(-5,7):
+                        Keys[n]=list(Key)
+                        Strikes[n]=0
+                        for m in range(7):
+                                Key[m]+=7
+                                if Key[m]>11:
+                                        Key[m]-=12
+                for Pitch in Pitches:
+                        Note=Pitch%12
+                        for n in Keys:
+                                if Keys[n].count(Note)!=1:
+                                        Strikes[n]+=1
+                Lows=[[0,Strikes[n]]]
+                for n in Strikes:
+                        if Strikes[n]<Lows[0][1]:
+                                Lows=[[n,Strikes[n]]]
+                        elif Strikes[n]==Lows[0][1] and n!=0:
+                                Lows.append([n,Strikes[n]])
+                Winner=Lows[0][0]
+                for Low in Lows:
+                        if abs(Low[0])<abs(Winner):
+                                Winner=Low[0]
+                        elif abs(Low[0])==abs(Winner) and Low[0]>0:
+                                Winner=Low[0]
+        else:
+                Winner=0
+        return Winner
