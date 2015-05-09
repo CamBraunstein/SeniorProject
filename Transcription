@@ -1,0 +1,230 @@
+import wave
+from BeatTracking import *
+from PitchTracking import *
+from KeyFinding import *
+Precision=16#This determines how far we are going to chop up our Measure
+Values={'Highest':Precision, Precision:'whole',int(Precision/2):'half',int(Precision/4):'quarter',int(Precision/8):'eighth',int(Precision/16):'16th'}
+if 1 in Values==False:
+        print('problem: no value worth 1')
+Pitches={0:'A',2:'B',3:'C',5:'D',7:'E',8:'F',10:'G'}
+Tempos={'Grave':[0,24],'Lento':[24,48],'Adagio':[48,72],'Adante':[72,96],'Allegretto':[96,120],'Allegro':[120,132],'Vivace':[132,144],'Presto':[144,184],'Prestissimo':[184,500]}
+class Note:
+        def __init__(self,Type,Start,Duration,Pitch,Volume):
+                self.Type=Type
+                #Here we can determine Note values and positioning
+                #self.ID=ID
+                self.Start=Start
+                self.Duration=Duration
+                self.Volume=Volume
+                self.Measure=0
+                self.Beat=0
+                self.Pitch=Pitch
+                self.Voice=1
+                self.Alter=0
+                self.Value='16th'
+                self.Dot=False
+                self.Chord=False
+                self.Tie=False
+        def NotePitch(self,Key):
+                self.Letter=self.Pitch%12
+                if self.Letter!=0 and self.Letter!=2 and self.Letter!=3 and self.Letter!=5 and self.Letter!=7 and self.Letter!=8 and self.Letter!=10:
+                        if Key>=0:
+                                self.Alter+=1
+                                self.Pitch-=1
+                        else:
+                                self.Alter-=1
+                                self.Pitch+=1
+                        self.Letter=self.Pitch%12
+                self.Letter=Pitches[self.Pitch%12]
+                self.Octave=int((self.Pitch+9)/12)
+        def NotePlacement(self,BPM,TimeSignature):
+                self.Measure=int(self.Start/(BPM*TimeSignature[0]))
+                self.Beat=self.Start/(BPM*TimeSignature[0])-self.Measure
+                for n in range(Precision):
+                        if self.Beat>n/Precision and self.Beat<(n+1)/Precision:
+                                self.Beat=n
+                                break
+                if isinstance(self.Beat,int)==False:
+                        print('Note Problem')
+                        self.Beat=0
+        def NoteValue(self,BPM,TimeSignature):#Determine note Value, Measure and Beat 
+                Value=int(self.Duration/BPM*(Precision/TimeSignature[1]))
+                if Value==0:
+                        Value=1
+                Start=Values['Highest']
+                self.ValueArray=[]
+                while Value!=0:
+                        #print('S',Start)
+                        if Value-Start>=0:
+                                self.ValueArray.append([int(Start)])
+                                if len(self.ValueArray)>=2:
+                                        if isinstance(self.ValueArray[-2][0],int)==True:
+                                                if self.ValueArray[-1][0]==int(self.ValueArray[-2][0]/2):
+                                                        #print('Ha')
+                                                        del self.ValueArray[-1]
+                                                        self.ValueArray[-1].append(int(Start))
+                                Value-=Start
+                        else:
+                                Start=int(Start)/2
+                                
+                OccupiedTime=sum(self.ValueArray[0])
+                self.Duration=sum(self.ValueArray[0])
+                self.EndBeat=self.Beat+OccupiedTime
+                self.EndMeasure=self.Measure
+                while self.EndBeat>=Precision:
+                        self.EndMeasure+=1
+                        self.EndBeat-=Precision
+                self.Value=Values[self.ValueArray[0][0]]
+                if len(self.ValueArray[0])==2:
+                        self.Dot=True
+                if len(self.ValueArray)>1:
+                        self.Tie='Start'
+                self.Info=[[self.Letter,self.Alter,self.Octave,self.Pitch],[self.Beat,self.Measure],[self.Volume]]
+               
+class TiedNote:
+        def __init__(self,NoteInfo,AdditionalBeats,Value):
+                self.Type='Note'
+                self.Voice=1
+                self.Letter=NoteInfo[0][0]
+                self.Alter=NoteInfo[0][1]
+                self.Octave=NoteInfo[0][2]
+                self.Pitch=NoteInfo[0][3]
+                self.Beat=NoteInfo[1][0]+AdditionalBeats
+                self.Measure=NoteInfo[1][1]
+                while self.Beat>=Precision:
+                        self.Measure+=1
+                        self.Beat-=Precision
+                
+                self.Duration=sum(Value)
+                self.EndBeat=self.Beat+sum(Value)
+                self.EndMeasure=self.Measure
+                while self.EndBeat>=Precision:
+                        self.EndMeasure+=1
+                        self.EndBeat-=Precision
+                self.Value=Values[Value[0]]
+                if len(Value)>1:
+                        self.Dot=True
+                else:
+                        self.Dot=False
+                self.Volume=NoteInfo[2][0]
+                self.Tie='Middle'
+                self.Chord=False
+                
+                        
+class Rest:
+        def __init__(self,Type,Start,Duration,Measure,Beat,Value):
+                self.Type=Type
+                self.Duration=Value
+                self.Measure=Measure
+                self.Beat=Beat
+                self.Voice=1
+                self.Value=Values[Value]
+                
+
+
+class Transcription:
+        def __init__(self):
+                self.Onsets=[]
+                self.TimeSignature=[4,4]
+                self.Notes={}
+                self.Continue=True
+        def Initialize(self,Address,FolderAddress):
+                SongP=wave.open(Address,'rb').getparams()
+                self.Address=Address
+                self.FolderAddress=FolderAddress
+                self.Title=Address.split('/')[-1][:-4]
+                self.channelnumber=SongP[0]
+                self.channelwidth=SongP[1]
+                self.Framerate=SongP[2]
+                self.Frames=SongP[3]
+        def FindOnsets(self):
+                Amplitude=350
+                C=1.3
+                BeatData=Beatroot(self.Address,C)
+                #BeatData=Flux(self.Address,Amplitude)
+                self.Onsets=BeatData['Onsets']
+                self.Dynamic=BeatData['Dynamic']
+                self.BPM=BeatData['BPM']
+                self.Continue=BeatData['Continue']
+                self.Tempo='Prestissimo'
+                for tempo in Tempos:
+                        if 60*44100/self.BPM>=Tempos[tempo][0] and 60*44100/self.BPM<Tempos[tempo][1]:
+                                self.Tempo=tempo
+                                break
+        def FindNotes(self):
+                KeyList=[]
+                for Beat in self.Onsets:
+                        NoteList=Qtransform(self.Address,self.FolderAddress,Beat[0],Beat[1],Beat[2])
+                        for Entry in NoteList:#Format should be: Onset, Duration, Pitch, and Volume
+                                note=Note('Note',Entry[0],Entry[1],Entry[2],Entry[3])
+                                self.Notes['Note{0}'.format(len(self.Notes))]=note
+                                KeyList.append(Entry[2])
+                self.Key=FindKey(KeyList)
+                #print('Key',self.Key)               
+        def FindTies(self):
+                print('Ordering Notes',self.BPM)
+                TiedNotes={}
+                for n in range(len(self.Notes)):
+                        self.Notes['Note{0}'.format(n)].NotePitch(self.Key)
+                        self.Notes['Note{0}'.format(n)].NotePlacement(self.BPM,self.TimeSignature)#Order the notes into measures now.
+                        self.Notes['Note{0}'.format(n)].NoteValue(self.BPM,self.TimeSignature)
+                        if self.Notes['Note{0}'.format(n)].Tie=='Start':
+                                AdditionalBeats=sum(self.Notes['Note{0}'.format(n)].ValueArray[0])
+                                for m in self.Notes['Note{0}'.format(n)].ValueArray[1:]:
+                                        tiednote=TiedNote(self.Notes['Note{0}'.format(n)].Info,AdditionalBeats,m)
+                                        TiedNotes['Note{0}'.format(len(self.Notes)+len(TiedNotes))]=tiednote
+                                        AdditionalBeats+=sum(m)
+                                TiedNotes['Note{0}'.format(len(self.Notes)+len(TiedNotes)-1)].Tie='End'
+                for n in TiedNotes:
+                        self.Notes[n]=TiedNotes[n]
+        def OrderNotes(self):
+                self.Measures=[]
+                print('Notes',self.Notes)
+                for n in range(len(self.Notes)):
+                        while len(self.Measures)<=self.Notes['Note{0}'.format(n)].Measure:
+                                self.Measures.append([])
+                                for m in range(Precision):
+                                        self.Measures[-1].append([])
+                        print(len(self.Measures))
+                        self.Measures[self.Notes['Note{0}'.format(n)].Measure][self.Notes['Note{0}'.format(n)].Beat].append(self.Notes['Note{0}'.format(n)])
+        def AddRests(self):
+                #print('m1',self.Measures[0])
+                LastMeasure=0
+                LastBeat=0
+                for n in range(len(self.Measures)):
+                        for m in range(Precision):
+                                if len(self.Measures[n][m])>0:
+                                        for Note in self.Measures[n][m]:
+                                                if Note.EndMeasure>LastMeasure:
+                                                        LastMeasure=Note.EndMeasure
+                                                        LastBeat=Note.EndBeat
+                                                elif Note.EndBeat>LastBeat:
+                                                        LastBeat=Note.EndBeat
+                                        if len(self.Measures[n][m])>1:
+                                                for o in range(1,len(self.Measures[n][m])):
+                                                        self.Measures[n][m][o].Chord=True
+                                elif len(self.Measures[n][m])==0:
+                                        if n==LastMeasure and m>=LastBeat:
+                                                RestValue=0
+                                                for o in range(m,Precision):
+                                                        if len(self.Measures[n][o])==0:
+                                                                RestValue+=1
+                                                        else:
+                                                                break
+                                                print('R',RestValue)
+                                                Start=Values['Highest']
+                                                while RestValue!=0:
+                                                        if RestValue-Start>=0:
+                                                                break
+                                                        else:
+                                                                Start=int(Start)/2
+                                                LastBeat+=Start
+                                                if LastBeat>=Precision:
+                                                        LastBeat=0
+                                                        LastMeasure+=1
+                                                print('L,S',n,m,LastBeat)
+                                                rest=Rest('Rest',0,1,n,m,int(Start))
+                                                self.Measures[n][m].append(rest)
+                #Save deleting blank beats until the end, or don't delete at all
+
+Transcription=Transcription()
