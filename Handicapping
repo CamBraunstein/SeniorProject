@@ -1,0 +1,31 @@
+class handicap:
+        def __init__(self,Instrument,N):
+                self.N=N
+                self.KnownPitches={}
+                self.HarmonicHandicapOn=True
+                self.Instrument=Instrument
+        def Initialize(self,FolderAddress):
+                HarmonicsDictionary={}
+                file=str(open(FolderAddress+"Harmonics.txt").read()).split('$')
+                for n in range(len(file)):
+                        file[n]=file[n][1:-1]
+                for n in range(0,len(file),2):
+                        Harmonics={}
+                        Data=file[n+1].split(',')
+                        for entry in Data:
+                                Harmonics[int(entry.split(':')[0])]=float(entry.split(':')[1])
+                        HarmonicsDictionary[file[n]]=Harmonics
+                self.Harmonics=HarmonicsDictionary[self.Instrument]
+        def HarmonicHandicap(self,Pitch):
+                #print('hcapping',self.KnownPitches)
+                Weight=0
+                if self.HarmonicHandicapOn==True:
+                        for n in self.KnownPitches:
+                                if Pitch-n in self.Harmonics:
+                                        Weight+=self.KnownPitches[n]*self.Harmonics[Pitch-n]
+                        Weight=Weight/2**(self.N-1)
+                return Weight
+        def AudibleHandicap(self):
+                print('Work in Progress')
+
+Handicap=handicap('Piano',12)
