@@ -1,0 +1,166 @@
+FolderAddress="/Users/cam/Desktop/Senior Project/"
+import tkinter
+import time
+import os
+from Transcription import *
+from XMLFormating import *
+def ListSongs():
+        SongList=[]
+        for root, dirs, files in os.walk("/Users/cam/Music/iTunes/iTunes Music",topdown=True): #/Alfred/Alfred Basic Adult Piano Cource", topdown=True):
+                for name in files:
+                        if name.endswith('.wav'):
+                                SongList.append(os.path.join(root, name))
+        return SongList
+#Remember, if a module isn't working, try saving it.
+class ReportGenerator:
+        def __init__(self,Address):
+                self.Address=Address
+                self.time=time.time()
+        def NewReport(self,Name):
+                file=open(self.Address,'w')
+                file.write("Begin Report for "+Name+' at ' +time.strftime("%T %A %B %d %Y",time.gmtime())+"\n")
+                file.close()
+                self.time=time.time()
+                self.Start=time.time()
+        def EndTime(self,Function):
+                report=str(open(self.Address,'r').read())
+                file=open(self.Address,'w')
+                file.write(report+Function+" "+str(time.time()-self.time)+"\n")
+                file.close()
+                self.time=time.time()
+        def EndReport(self):
+                report=str(open(self.Address,'r').read())
+                file=open(self.Address,'w')
+                file.write(report+"Total Time: "+str(time.time()-self.Start)+'\n'+"End Report at "+ time.strftime("%T %A %B %d %Y",time.gmtime()))
+                file.close()
+Report=ReportGenerator(FolderAddress+"ProgramReport.txt")
+
+class interface(tkinter.Frame):
+        def __init__(self, master=None):
+                tkinter.Frame.__init__(self, master)
+                self.ListShowing=False
+                self.WidgetTracker={}
+                self.CreateWidgets()
+        def CreateWidgets(self):
+                Welcome=tkinter.Label(root,text="Enter full Address of Song Here")
+                Welcome.grid(row=0,column=0)
+                self.WidgetTracker['Welcome']=Welcome
+                AddressEntry=tkinter.Entry(root,width=50)
+                AddressEntry.grid(row=1,column=0)
+                self.WidgetTracker['AddressEntry']=AddressEntry
+                Enter=tkinter.Button(root,text="Transcribe",command=lambda Address='SeeAddressEntry':self.EnterSong(Address))
+                Enter.grid(row=1,column=1)
+                self.WidgetTracker['Enter']=Enter
+                Alternate=tkinter.Label(root,text="Alternatively, find the Address from a List")
+                Alternate.grid(row=2,column=0)
+                self.WidgetTracker['Alternate']=Alternate
+                AlternateButton=tkinter.Button(root,text="Search List",command=self.FindSongs)
+                AlternateButton.grid(row=3,column=0)
+                self.WidgetTracker['AlternateButton']=AlternateButton
+        def FindSongs(self):
+                if self.ListShowing==False:
+                        self.ClearFrame()
+                        self.ListShowing=True
+                        self.Position=0
+                        self.SongList=ListSongs()                       
+                if self.Position-10>=0:
+                        BackTen=tkinter.Button(root,text="Previous 10",command=lambda Move=-10:self.MoveSongs(Move))
+                        BackTen.grid(row=0,column=0)
+                        self.WidgetTracker['BackTen']=BackTen
+                if self.Position+10<len(self.SongList):
+                        ForwardTen=tkinter.Button(root,text="Next 10",command=lambda Move=10:self.MoveSongs(Move))
+                        ForwardTen.grid(row=0,column=1)
+                        self.WidgetTracker['ForwardTen']=ForwardTen
+                BackButton=tkinter.Button(root,text="Back to Main", command=self.BackToMain)
+                BackButton.grid(row=0,column=2)
+                self.WidgetTracker['BackButton']=BackButton
+                Counter=0
+                while self.Position+Counter<len(self.SongList) and Counter<10:
+                        Label=tkinter.Label(root,text=self.SongList[self.Position+Counter].split('/')[-1])
+                        Label.grid(row=1+Counter,column=0,sticky='W')
+                        self.WidgetTracker['Label{0}'.format(Counter)]=Label
+                        Select=tkinter.Button(root,text="Select",command=lambda Address=self.SongList[self.Position+Counter]:self.EnterSong(Address))
+                        Select.grid(row=1+Counter,column=1)
+                        self.WidgetTracker['Select{0}'.format(Counter)]=Select
+                        Counter+=1
+        def BackToMain(self):
+                self.ClearFrame()
+                self.CreateWidgets()
+                self.ListShowing=False
+        def ClearFrame(self):
+                DeathList=[]
+                for n in self.WidgetTracker:
+                        DeathList.append(n)
+                        self.WidgetTracker[n].destroy()
+                for n in DeathList:
+                        del self.WidgetTracker[n]
+        def MoveSongs(self,Move):
+                self.ClearFrame()
+                self.Position+=Move
+                self.FindSongs()
+        def EnterSong(self,Address):
+                if Address=='SeeAddressEntry':
+                        Address=self.WidgetTracker['AddressEntry'].get()
+                self.ClearFrame()
+                Report.NewReport(Address.split('/')[-1][:-4])
+                Transcription.Initialize(Address,FolderAddress)
+                Transcription.FindOnsets()
+                Report.EndTime('Onsets')
+                if Transcription.Continue==True:
+                        Transcription.FindNotes()
+                        Report.EndTime('FindPitches')
+                        Transcription.FindTies()
+                        Report.EndTime('FindNoteValues')
+                        Transcription.OrderNotes()
+                        Report.EndTime('OrderNotes')
+                        Transcription.AddRests()
+                        Report.EndTime('Fill in Rests')
+                        NewFormat(Transcription)
+                        Report.EndTime('Formatting')
+                        Done=tkinter.Label(root,text="All Done"+FolderAddress+Address.split('/')[-1][:-4])
+                        Done.grid(row=0,column=0)
+                        self.WidgetTracker['Done']=Done
+                else:
+                        Fail=tkinter.Label(root,text="Sorry, no beats detected")
+                        Fail.grid(row=0,column=0)
+                        self.WidgetTracker['Fail']=Fail
+                        print('No Beats Detected')
+                Report.EndReport()
+                Return=tkinter.Button(root,text="Return to Main",command=self.BackToMain)
+                Return.grid(row=1,column=0)
+                self.WidgetTracker['Return']=Return
+                
+                
+
+def Transcribe():
+        #Address="/Users/cam/Music/iTunes/iTunes Music/Alfred/Alfred Basic Adult Piano Cource/01 Middle C.wav"
+        Name="01 Rigaudon"
+        #Address="/Users/cam/Music/iTunes/iTunes Music/Diane Hidy/Essential Piano Repertoire Level 2/"+Name+".wav"
+        #Address="/Users/cam/Music/iTunes/iTunes Music/Alfred/Alfred Basic Adult Piano Cource/01 Middle C.wav"
+        Address="/Users/cam/Music/iTunes/iTunes Music/Alfred/Alfred Basic Adult Piano Cource/02 Right Hand Warm-Up.wav"
+        Transcription.Initialize(Address,FolderAddress)
+        Report.NewReport(Address.split('/')[-1][:-4])
+        Transcription.FindOnsets()
+        Report.EndTime('Onsets')
+        if Transcription.Continue==True:
+                Transcription.FindNotes()
+                Report.EndTime('FindPitches')
+                Transcription.FindTies()
+                Report.EndTime('FindNoteValues')
+                Transcription.OrderNotes()
+                Report.EndTime('OrderNotes')
+                Transcription.AddRests()
+                Report.EndTime('Fill in Rests')
+                NewFormat(Transcription)
+                Report.EndTime('Formatting')
+        else:
+                print('No Beats Detected')
+        Report.EndReport()               
+Transcribe()
+
+'''root = tkinter.Tk()
+root.geometry('%dx%d+%d+%d' % (700, 500, 100, 100))
+root.title('Transcription')
+Interface = interface(master=root)
+Interface.mainloop()
+root.destroy()'''
